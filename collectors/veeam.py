@@ -110,7 +110,7 @@ class VeeamCollector:
         return sessions
 
     def _collect_repositories(self) -> list:
-        data = self._get("backupRepositories")
+        data = self._get("backupInfrastructure/repositories")
         repos = []
         for r in data.get("data", []):
             repos.append({
@@ -125,7 +125,7 @@ class VeeamCollector:
         return repos
 
     def _collect_managed_servers(self) -> list:
-        data = self._get("managedServers")
+        data = self._get("backupInfrastructure/managedServers")
         servers = []
         for s in data.get("data", []):
             servers.append({
