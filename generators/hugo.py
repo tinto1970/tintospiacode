@@ -46,6 +46,7 @@ class HugoGenerator:
             self._write("vmware/clusters.json", results["vmware"].get("clusters", []))
 
         if "paloalto" in results:
+            self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))
             self._write("paloalto/system_info.json", results["paloalto"].get("system_info", {}))
             self._write("paloalto/interfaces.json", results["paloalto"].get("interfaces", []))
             self._write("paloalto/sessions.json", results["paloalto"].get("sessions", {}))
