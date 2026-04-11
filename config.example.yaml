@@ -9,6 +9,9 @@ collectors:
     username: "administrator"
     password: "changeme"
     verify_ssl: false                    # set true in production with valid cert
+    jobs_export_path: ""                # path to JSON exported by Export-VeeamJobs.ps1
+                                        # e.g. "/mnt/veeam-export/jobs.json" (SMB mount)
+                                        # leave empty to fall back to REST API only
 
   proxmox:
     enabled: true

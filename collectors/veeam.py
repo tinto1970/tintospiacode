@@ -1,9 +1,18 @@
 """
 Veeam Backup & Replication collector.
-Uses the Veeam REST API v1 (VBR 12+).
+
+Job collection strategy:
+  - Primary: read a JSON file exported by Export-VeeamJobs.ps1 running on the
+    Veeam Windows server via Task Scheduler. This is the only way to include
+    ProxmoxVE jobs (VmbApiPolicyTempJob), which are not exposed by the REST API.
+  - Fallback: REST API /jobs endpoint (returns only Backup/HyperV/Agent jobs).
+
+Sessions, repositories and managed servers always come from the REST API.
 """
 
+import json
 import logging
+import os
 import requests
 import urllib3
 
@@ -16,39 +25,35 @@ class VeeamCollector:
         self.username = config["username"]
         self.password = config["password"]
         self.verify_ssl = config.get("verify_ssl", False)
+        # Path to the JSON file produced by Export-VeeamJobs.ps1.
+        # Can be a local path (SMB mount) or any accessible filesystem path.
+        self.jobs_export_path = config.get("jobs_export_path", "")
         self._token = None
 
         if not self.verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     # ------------------------------------------------------------------
-    # Authentication
+    # REST API helpers
     # ------------------------------------------------------------------
 
     def _login(self):
         url = f"{self.host}/api/oauth2/token"
         resp = requests.post(
             url,
-            data={
-                "grant_type": "password",
-                "username": self.username,
-                "password": self.password,
-            },
-            headers={"x-api-version": "1.1-rev2", "Content-Type": "application/x-www-form-urlencoded"},
+            data={"grant_type": "password", "username": self.username, "password": self.password},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
             verify=self.verify_ssl,
             timeout=30,
         )
         resp.raise_for_status()
         self._token = resp.json()["access_token"]
-        logger.debug("Veeam: authenticated successfully")
+        logger.debug("Veeam: REST authenticated")
 
     def _headers(self) -> dict:
-        return {
-            "Authorization": f"Bearer {self._token}",
-            "Accept": "application/json",
-        }
+        return {"Authorization": f"Bearer {self._token}", "Accept": "application/json"}
 
-    def _get(self, path: str, params: dict = None) -> dict | list:
+    def _get(self, path: str, params: dict = None) -> dict:
         if not self._token:
             self._login()
         url = f"{self.host}/api/v1/{path.lstrip('/')}"
@@ -57,7 +62,6 @@ class VeeamCollector:
         return resp.json()
 
     def _get_all(self, path: str, page_size: int = 100) -> list:
-        """Fetch all pages for paginated endpoints."""
         items = []
         skip = 0
         while True:
@@ -89,17 +93,45 @@ class VeeamCollector:
             return {"error": str(exc)}
 
     def _collect_jobs(self) -> list:
+        # --- primary: read from PS export file ---
+        if self.jobs_export_path and os.path.isfile(self.jobs_export_path):
+            try:
+                with open(self.jobs_export_path, encoding="utf-8-sig") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict):
+                    raw = [raw]
+                jobs = []
+                for j in raw:
+                    jobs.append({
+                        "name":             j.get("name", ""),
+                        "type":             j.get("type", ""),
+                        "is_disabled":      j.get("is_disabled", False),
+                        "schedule_enabled": j.get("schedule_enabled", False),
+                        "last_result":      j.get("last_result", ""),
+                        "last_end_time":    j.get("last_end_time", ""),
+                        "last_start_time":  j.get("last_start_time", ""),
+                        "last_state":       j.get("last_state", ""),
+                    })
+                logger.info("Veeam: loaded %d jobs from export file", len(jobs))
+                return jobs
+            except Exception as exc:
+                logger.warning("Veeam: could not read jobs export file — %s — falling back to REST", exc)
+
+        # --- fallback: REST API (no ProxmoxVE jobs) ---
+        logger.warning("Veeam: jobs_export_path not set or file missing — using REST API (ProxmoxVE jobs will be missing)")
         jobs = []
         for j in self._get_all("jobs"):
             jobs.append({
-                "id": j.get("id"),
-                "name": j.get("name"),
-                "type": j.get("type"),
-                "description": j.get("description"),
-                "is_disabled": j.get("isDisabled", False),
+                "name":             j.get("name", ""),
+                "type":             j.get("type", ""),
+                "is_disabled":      j.get("isDisabled", False),
                 "schedule_enabled": j.get("scheduleEnabled", False),
+                "last_result":      "",
+                "last_end_time":    "",
+                "last_start_time":  "",
+                "last_state":       "",
             })
-        logger.debug("Veeam: collected %d jobs", len(jobs))
+        logger.debug("Veeam: collected %d jobs via REST", len(jobs))
         return jobs
 
     def _collect_sessions(self) -> list:
@@ -107,16 +139,15 @@ class VeeamCollector:
         sessions = []
         for s in data.get("data", []):
             sessions.append({
-                "id": s.get("id"),
-                "name": s.get("name"),
-                "job_id": s.get("jobId"),
-                "type": s.get("sessionType"),
-                "state": s.get("state"),
-                "result": s.get("result"),
-                "creation_time": s.get("creationTime"),
-                "end_time": s.get("endTime"),
+                "id":               s.get("id"),
+                "name":             s.get("name"),
+                "job_id":           s.get("jobId"),
+                "type":             s.get("sessionType"),
+                "state":            s.get("state"),
+                "result":           s.get("result"),
+                "creation_time":    s.get("creationTime"),
+                "end_time":         s.get("endTime"),
                 "progress_percent": s.get("progressPercent"),
-                "log_truncated": s.get("isLogTruncated", False),
             })
         logger.debug("Veeam: collected %d sessions", len(sessions))
         return sessions
@@ -125,10 +156,10 @@ class VeeamCollector:
         repos = []
         for r in self._get_all("backupInfrastructure/repositories"):
             repos.append({
-                "id": r.get("id"),
-                "name": r.get("name"),
-                "type": r.get("type"),
-                "capacity_gb": round(r.get("capacityGB", 0), 1),
+                "id":            r.get("id"),
+                "name":          r.get("name"),
+                "type":          r.get("type"),
+                "capacity_gb":   round(r.get("capacityGB", 0), 1),
                 "free_space_gb": round(r.get("freeSpaceGB", 0), 1),
                 "used_space_gb": round(r.get("usedSpaceGB", 0), 1),
             })
@@ -139,9 +170,9 @@ class VeeamCollector:
         servers = []
         for s in self._get_all("backupInfrastructure/managedServers"):
             servers.append({
-                "id": s.get("id"),
-                "name": s.get("name"),
-                "type": s.get("type"),
+                "id":          s.get("id"),
+                "name":        s.get("name"),
+                "type":        s.get("type"),
                 "description": s.get("description"),
             })
         logger.debug("Veeam: collected %d managed servers", len(servers))
