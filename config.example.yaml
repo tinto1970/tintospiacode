@@ -1,0 +1,44 @@
+# tintospia - configuration example
+# Copy this file to config.yaml and fill in your values.
+# config.yaml is gitignored and never committed.
+
+collectors:
+  veeam:
+    enabled: true
+    host: "https://veeam-server:9419"   # Veeam Backup & Replication REST API
+    username: "administrator"
+    password: "changeme"
+    verify_ssl: false                    # set true in production with valid cert
+
+  proxmox:
+    enabled: true
+    host: "https://proxmox-host:8006"   # Proxmox VE API
+    username: "root@pam"
+    password: "changeme"
+    verify_ssl: false
+
+  vmware:
+    enabled: false
+    host: "https://vcenter"             # vCenter Server hostname or IP
+    username: "administrator@vsphere.local"
+    password: "changeme"
+    verify_ssl: false
+    use_powercli: false                 # set true to use PowerCLI via pwsh
+
+  paloalto:
+    enabled: false
+    host: "https://192.168.1.1"         # Palo Alto management IP
+    api_key: ""                         # generate with: curl -k -X GET \
+                                        # "https://<host>/api/?type=keygen&user=<u>&password=<p>"
+    verify_ssl: false
+
+hugo:
+  site_path: "/path/to/tintospiasite"   # absolute path to Hugo site directory
+  build_after_collect: true             # run `hugo build` after data collection
+
+publish:
+  enabled: false                        # set true to push tintospiasite to GitHub
+  repo_path: "/path/to/tintospiasite"   # same as hugo.site_path typically
+  branch: "main"
+  commit_message: "data: update {timestamp}"
+  remote: "origin"
