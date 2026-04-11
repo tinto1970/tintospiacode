@@ -15,13 +15,15 @@ Infrastructure monitoring dashboard generator. Collects data from Veeam Backup &
 ## Requirements
 
 - Python 3.12+
+- `python3.12-venv` (Ubuntu: `sudo apt install python3.12-venv`)
 - Hugo extended (latest)
 - `pwsh` (PowerShell Core) — only if using VMware PowerCLI mode
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 cp config.example.yaml config.yaml
 # edit config.yaml with your credentials and paths
 ```
@@ -29,9 +31,9 @@ cp config.example.yaml config.yaml
 ## Usage
 
 ```bash
-python main.py
+.venv/bin/python main.py
 # or with a custom config path:
-python main.py --config /etc/tintospia/config.yaml
+.venv/bin/python main.py --config /etc/tintospia/config.yaml
 ```
 
 ## Cron example
@@ -39,7 +41,7 @@ python main.py --config /etc/tintospia/config.yaml
 Run every 10 minutes and log output:
 
 ```
-*/10 * * * * cd /path/to/tintospiacode && python main.py >> /var/log/tintospia.log 2>&1
+*/10 * * * * cd /path/to/tintospiacode && .venv/bin/python main.py >> /var/log/tintospia.log 2>&1
 ```
 
 ## Configuration
