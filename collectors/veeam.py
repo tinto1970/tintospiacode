@@ -103,8 +103,9 @@ class VeeamCollector:
         return jobs
 
     def _collect_sessions(self) -> list:
+        data = self._get("sessions", params={"limit": 10, "orderColumn": "CreationTime", "orderAsc": "false"})
         sessions = []
-        for s in self._get_all("sessions"):
+        for s in data.get("data", []):
             sessions.append({
                 "id": s.get("id"),
                 "name": s.get("name"),

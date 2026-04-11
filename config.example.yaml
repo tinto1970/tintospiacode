@@ -16,6 +16,9 @@ collectors:
     username: "root@pam"
     password: "changeme"
     verify_ssl: false
+    ssh_user: "root"                    # SSH user for sensors collection (default: root)
+    ssh_password: "changeme"            # SSH password (default: same as API password)
+    ssh_port: 22                        # SSH port (default: 22)
 
   vmware:
     enabled: false

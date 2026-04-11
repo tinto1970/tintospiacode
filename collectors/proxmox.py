@@ -1,9 +1,11 @@
 """
 Proxmox VE collector.
-Uses the Proxmox REST API.
+Uses the Proxmox REST API and SSH for sensors data.
 """
 
+import json
 import logging
+import re
 import requests
 import urllib3
 
@@ -16,6 +18,10 @@ class ProxmoxCollector:
         self.username = config["username"]
         self.password = config["password"]
         self.verify_ssl = config.get("verify_ssl", False)
+        self.ssh_host = config.get("ssh_host")       # hostname/IP for SSH (optional, falls back to API host)
+        self.ssh_user = config.get("ssh_user", "root")
+        self.ssh_password = config.get("ssh_password", self.password)
+        self.ssh_port = config.get("ssh_port", 22)
         self._ticket = None
         self._csrf = None
 
@@ -66,20 +72,79 @@ class ProxmoxCollector:
             vms = []
             containers = []
             storage = []
+            sensors = []
             for node in nodes:
                 node_name = node["node"]
                 vms.extend(self._collect_vms(node_name))
                 containers.extend(self._collect_containers(node_name))
                 storage.extend(self._collect_storage(node_name))
+                sensors.extend(self._collect_sensors(node_name))
             return {
                 "nodes": nodes,
                 "vms": vms,
                 "containers": containers,
                 "storage": storage,
+                "sensors": sensors,
             }
         except Exception as exc:
             logger.error("Proxmox: collection failed — %s", exc)
             return {"error": str(exc)}
+
+    # ------------------------------------------------------------------
+    # SSH helpers
+    # ------------------------------------------------------------------
+
+    def _ssh_run(self, node_name: str, command: str) -> str:
+        import paramiko
+        # derive SSH host: use ssh_host if set, otherwise strip port from API host
+        if self.ssh_host:
+            host = self.ssh_host
+        else:
+            host = re.sub(r"^https?://", "", self.host).split(":")[0]
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                host, port=self.ssh_port,
+                username=self.ssh_user, password=self.ssh_password,
+                timeout=15, look_for_keys=False, allow_agent=False,
+            )
+            _, stdout, stderr = client.exec_command(command, timeout=15)
+            out = stdout.read().decode()
+            err = stderr.read().decode()
+            if err:
+                logger.debug("Proxmox SSH stderr on %s: %s", node_name, err.strip())
+            return out
+        finally:
+            client.close()
+
+    def _collect_sensors(self, node: str) -> list:
+        try:
+            out = self._ssh_run(node, "sensors -j 2>/dev/null")
+            raw = json.loads(out)
+        except Exception as exc:
+            logger.warning("Proxmox sensors on %s failed — %s", node, exc)
+            return []
+
+        readings = []
+        for chip, features in raw.items():
+            if not isinstance(features, dict):
+                continue
+            for feature_name, feature_data in features.items():
+                if not isinstance(feature_data, dict):
+                    continue
+                # look for temperature inputs (keys ending with _input)
+                for key, value in feature_data.items():
+                    if key.endswith("_input") and "temp" in key.lower() and value > 0:
+                        readings.append({
+                            "node": node,
+                            "chip": chip,
+                            "feature": feature_name,
+                            "temp_c": round(value, 1),
+                        })
+        logger.debug("Proxmox: collected %d sensor readings on node %s", len(readings), node)
+        return readings
 
     def _collect_nodes(self) -> list:
         raw = self._get("nodes")

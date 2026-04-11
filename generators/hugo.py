@@ -37,6 +37,7 @@ class HugoGenerator:
             self._write("proxmox/vms.json", results["proxmox"].get("vms", []))
             self._write("proxmox/containers.json", results["proxmox"].get("containers", []))
             self._write("proxmox/storage.json", results["proxmox"].get("storage", []))
+            self._write("proxmox/sensors.json", results["proxmox"].get("sensors", []))
 
         if "vmware" in results:
             self._write("vmware/hosts.json", results["vmware"].get("hosts", []))
