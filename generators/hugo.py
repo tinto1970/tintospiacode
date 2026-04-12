@@ -76,6 +76,9 @@ class HugoGenerator:
         if "net" in results:
             self._write("net/hosts.json", results["net"].get("hosts", []))
 
+        if "os" in results:
+            self._write("os/hosts.json", results["os"].get("hosts", []))
+
         self._write("meta/last_update.json", {
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sources": list(results.keys()),
