@@ -18,6 +18,7 @@ from collectors.veeam import VeeamCollector
 from collectors.proxmox import ProxmoxCollector
 from collectors.vmware import VMwareCollector
 from collectors.paloalto import PaloAltoCollector
+from collectors.esxi import ESXiCollector
 from generators.hugo import HugoGenerator
 from publisher.github import GitHubPublisher
 
@@ -47,6 +48,7 @@ def run_collectors(config: dict) -> dict:
         "proxmox": ProxmoxCollector,
         "vmware": VMwareCollector,
         "paloalto": PaloAltoCollector,
+        "esxi": ESXiCollector,
     }
 
     for name, cls in collector_map.items():

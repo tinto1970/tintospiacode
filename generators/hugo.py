@@ -45,6 +45,13 @@ class HugoGenerator:
             self._write("vmware/datastores.json", results["vmware"].get("datastores", []))
             self._write("vmware/clusters.json", results["vmware"].get("clusters", []))
 
+        if "esxi" in results:
+            self._write("esxi/system_info.json", results["esxi"].get("system_info", {}))
+            self._write("esxi/sensors.json",     results["esxi"].get("sensors", {}))
+            self._write("esxi/vms.json",         results["esxi"].get("vms", []))
+            self._write("esxi/datastores.json",  results["esxi"].get("datastores", []))
+            self._write("esxi/nics.json",        results["esxi"].get("nics", []))
+
         if "paloalto" in results:
             self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))
             self._write("paloalto/system_info.json", results["paloalto"].get("system_info", {}))
