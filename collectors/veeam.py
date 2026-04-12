@@ -82,7 +82,10 @@ class VeeamCollector:
         logger.info("Veeam: starting collection")
         try:
             self._login()
+            import re
+            host = re.sub(r"^https?://", "", self.host).split(":")[0]
             return {
+                "host": host,
                 "jobs": self._collect_jobs(),
                 "sessions": self._collect_sessions(),
                 "repositories": self._collect_repositories(),

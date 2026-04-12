@@ -61,6 +61,7 @@ class PaloAltoCollector:
         logger.info("PaloAlto: starting collection")
         try:
             data = {
+                "host": self._ssh_host(),
                 "environmentals": self._collect_environmentals(),
             }
             if self.api_key:

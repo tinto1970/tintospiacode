@@ -27,6 +27,7 @@ class HugoGenerator:
         logger.info("Hugo: generating data files")
 
         if "veeam" in results:
+            self._write("veeam/server_info.json", {"host": results["veeam"].get("host", "")})
             self._write("veeam/jobs.json", results["veeam"].get("jobs", []))
             self._write("veeam/sessions.json", results["veeam"].get("sessions", []))
             self._write("veeam/repositories.json", results["veeam"].get("repositories", []))
@@ -43,6 +44,7 @@ class HugoGenerator:
             self._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
 
         if "paloalto" in results:
+            self._write("paloalto/server_info.json", {"host": results["paloalto"].get("host", "")})
             self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))
             self._write("paloalto/system_info.json", results["paloalto"].get("system_info", {}))
             self._write("paloalto/interfaces.json", results["paloalto"].get("interfaces", []))
