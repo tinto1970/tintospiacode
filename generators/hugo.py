@@ -39,18 +39,12 @@ class HugoGenerator:
             self._write("proxmox/storage.json", results["proxmox"].get("storage", []))
             self._write("proxmox/sensors.json", results["proxmox"].get("sensors", []))
 
-        if "vmware" in results:
-            self._write("vmware/hosts.json", results["vmware"].get("hosts", []))
-            self._write("vmware/vms.json", results["vmware"].get("vms", []))
-            self._write("vmware/datastores.json", results["vmware"].get("datastores", []))
-            self._write("vmware/clusters.json", results["vmware"].get("clusters", []))
-
         if "esxi" in results:
-            self._write("esxi/system_info.json", results["esxi"].get("system_info", {}))
-            self._write("esxi/sensors.json",     results["esxi"].get("sensors", {}))
-            self._write("esxi/vms.json",         results["esxi"].get("vms", []))
-            self._write("esxi/datastores.json",  results["esxi"].get("datastores", []))
-            self._write("esxi/nics.json",        results["esxi"].get("nics", []))
+            self._write("vmware/system_info.json", results["esxi"].get("system_info", {}))
+            self._write("vmware/sensors.json",     results["esxi"].get("sensors", {}))
+            self._write("vmware/vms.json",         results["esxi"].get("vms", []))
+            self._write("vmware/datastores.json",  results["esxi"].get("datastores", []))
+            self._write("vmware/nics.json",        results["esxi"].get("nics", []))
 
         if "paloalto" in results:
             self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))
@@ -62,7 +56,7 @@ class HugoGenerator:
             self._write("paloalto/licenses.json", results["paloalto"].get("licenses", []))
 
         self._write("meta/last_update.json", {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sources": list(results.keys()),
         })
 
