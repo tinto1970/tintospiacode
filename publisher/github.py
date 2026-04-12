@@ -3,9 +3,7 @@ GitHub publisher.
 Commits and pushes the Hugo site repository after each data update.
 """
 
-import json
 import logging
-import os
 import subprocess
 from datetime import datetime, timezone
 
@@ -43,15 +41,6 @@ class GitHubPublisher:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         message = self.commit_message_tpl.format(timestamp=timestamp)
         self._run("git", "commit", "-m", message)
-
-        # Inject build info (SHA + build number) into the commit we just made
-        sha   = self._run("git", "rev-parse", "--short", "HEAD")
-        count = self._run("git", "rev-list", "--count", "HEAD")
-        build_path = os.path.join(self.repo_path, "data", "meta", "build.json")
-        with open(build_path, "w") as f:
-            json.dump({"number": int(count), "sha": sha}, f)
-        self._run("git", "add", build_path)
-        self._run("git", "commit", "--amend", "--no-edit")
 
         self._run("git", "push", self.remote, self.branch)
         logger.info("Publisher: pushed to %s/%s", self.remote, self.branch)

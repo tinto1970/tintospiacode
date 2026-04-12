@@ -6,6 +6,7 @@ Writes collected data as JSON files into the Hugo site's data/ directory.
 import json
 import logging
 import os
+import subprocess
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,23 @@ class HugoGenerator:
         with open(full_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         logger.debug("Hugo: wrote %s", full_path)
+
+    def _code_build_info(self) -> dict:
+        """Return commit count and short SHA of the tintospiacode repository."""
+        code_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            count = subprocess.run(
+                ["git", "rev-list", "--count", "HEAD"],
+                cwd=code_path, capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            sha = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=code_path, capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            return {"number": int(count), "sha": sha}
+        except Exception as exc:
+            logger.warning("Hugo: could not read code repo build info — %s", exc)
+            return {"number": 0, "sha": ""}
 
     def generate(self, results: dict):
         logger.info("Hugo: generating data files")
@@ -57,5 +75,6 @@ class HugoGenerator:
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sources": list(results.keys()),
         })
+        self._write("meta/build.json", self._code_build_info())
 
         logger.info("Hugo: data files written successfully")
