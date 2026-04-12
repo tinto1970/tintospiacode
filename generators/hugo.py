@@ -40,11 +40,7 @@ class HugoGenerator:
             self._write("proxmox/sensors.json", results["proxmox"].get("sensors", []))
 
         if "esxi" in results:
-            self._write("vmware/system_info.json", results["esxi"].get("system_info", {}))
-            self._write("vmware/sensors.json",     results["esxi"].get("sensors", {}))
-            self._write("vmware/vms.json",         results["esxi"].get("vms", []))
-            self._write("vmware/datastores.json",  results["esxi"].get("datastores", []))
-            self._write("vmware/nics.json",        results["esxi"].get("nics", []))
+            self._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
 
         if "paloalto" in results:
             self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))

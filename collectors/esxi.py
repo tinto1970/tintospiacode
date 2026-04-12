@@ -14,18 +14,27 @@ logger = logging.getLogger(__name__)
 
 class ESXiCollector:
     def __init__(self, config: dict):
-        self.host = config["host"]
-        self.ssh_user = config.get("ssh_user", "root")
-        self.ssh_password = config.get("ssh_password", "")
-        self.ssh_port = config.get("ssh_port", 22)
+        # Support both single-host (legacy) and multi-host (hosts: [...]) format
+        if "hosts" in config:
+            self._hosts = config["hosts"]
+        else:
+            self._hosts = [{
+                "host":         config["host"],
+                "ssh_user":     config.get("ssh_user", "root"),
+                "ssh_password": config.get("ssh_password", ""),
+                "ssh_port":     config.get("ssh_port", 22),
+            }]
 
     # ------------------------------------------------------------------
     # SSH helpers
     # ------------------------------------------------------------------
 
-    def _connect(self):
+    def _connect(self, host_cfg: dict):
         import paramiko
-        password = self.ssh_password
+        host     = host_cfg["host"]
+        port     = host_cfg.get("ssh_port", 22)
+        username = host_cfg.get("ssh_user", "root")
+        password = host_cfg.get("ssh_password", "")
 
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -33,23 +42,22 @@ class ESXiCollector:
         # Try password auth first
         try:
             client.connect(
-                self.host, port=self.ssh_port,
-                username=self.ssh_user, password=password,
+                host, port=port, username=username, password=password,
                 timeout=15, look_for_keys=False, allow_agent=False,
             )
             return client
         except paramiko.AuthenticationException:
             pass
 
-        # Fall back to keyboard-interactive (ESXi often restricts to this method)
+        # Fall back to keyboard-interactive (common on ESXi)
         sock = client.get_transport()
         if sock:
             sock.close()
 
-        transport = paramiko.Transport((self.host, self.ssh_port))
+        transport = paramiko.Transport((host, port))
         transport.connect(hostkey=None)
         transport.auth_interactive(
-            self.ssh_user,
+            username,
             lambda title, instructions, prompt_list: [
                 paramiko.common.byte_chr(0) if p[1] else password
                 for p in prompt_list
@@ -101,26 +109,31 @@ class ESXiCollector:
     # ------------------------------------------------------------------
 
     def collect(self) -> dict:
-        logger.info("ESXi: starting collection on %s", self.host)
-        client = None
-        try:
-            client = self._connect()
-            data = {
-                "system_info": self._collect_system_info(client),
-                "sensors":     self._collect_sensors(client),
-                "vms":         self._collect_vms(client),
-                "datastores":  self._collect_datastores(client),
-                "nics":        self._collect_nics(client),
-            }
-            return data
-        except Exception as exc:
-            logger.error("ESXi: collection failed — %s", exc)
-            return {"error": str(exc)}
-        finally:
-            if client:
-                client.close()
+        """Returns {"hosts": [ {host, system_info, sensors, vms, datastores, nics}, ... ]}"""
+        results = []
+        for host_cfg in self._hosts:
+            host_addr = host_cfg.get("host", "unknown")
+            logger.info("ESXi: starting collection on %s", host_addr)
+            client = None
+            try:
+                client = self._connect(host_cfg)
+                results.append({
+                    "host":        host_addr,
+                    "system_info": self._collect_system_info(client, host_addr),
+                    "sensors":     self._collect_sensors(client),
+                    "vms":         self._collect_vms(client),
+                    "datastores":  self._collect_datastores(client),
+                    "nics":        self._collect_nics(client),
+                })
+            except Exception as exc:
+                logger.error("ESXi: collection failed for %s — %s", host_addr, exc)
+                results.append({"host": host_addr, "error": str(exc)})
+            finally:
+                if client:
+                    client.close()
+        return {"hosts": results}
 
-    def _collect_system_info(self, client) -> dict:
+    def _collect_system_info(self, client, host_addr: str = "") -> dict:
         ver = self._parse_keyvalue(
             self._run(client, "esxcli --formatter=keyvalue system version get")
         )
@@ -152,7 +165,7 @@ class ESXiCollector:
             mem_gb = 0
 
         info = {
-            "hostname":    self.host,
+            "hostname":    host_addr,
             "version":     ver.get("Version", ""),
             "build":       ver.get("Build", ""),
             "product":     ver.get("Product", "VMware ESXi"),
