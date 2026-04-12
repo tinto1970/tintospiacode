@@ -178,11 +178,11 @@ class OSCollector:
         disk_block = ""
         if want_disk:
             disk_block = """
-$result.disk = @(Get-WmiObject Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 } | ForEach-Object {
-    $total = [long]$_.Size; $free = [long]$_.FreeSpace
+$result.disk = @([System.IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object {
+    $total = [long]$_.TotalSize; $free = [long]$_.TotalFreeSpace
     [PSCustomObject]@{
-        mount    = $_.DeviceID
-        label    = $_.VolumeName
+        mount    = $_.RootDirectory.ToString()
+        label    = $_.VolumeLabel
         total_gb = [math]::Round($total / 1GB, 1)
         used_gb  = [math]::Round(($total - $free) / 1GB, 1)
         free_gb  = [math]::Round($free / 1GB, 1)
