@@ -51,13 +51,18 @@ def run_collectors(config: dict) -> dict:
         "esxi": ESXiCollector,
     }
 
+    relay_cfg = collectors_cfg.get("rocky_linux_relay", {})
+
     for name, cls in collector_map.items():
         cfg = collectors_cfg.get(name, {})
         if not cfg.get("enabled", False):
             logger.info("Collector '%s' disabled, skipping", name)
             continue
         try:
-            collector = cls(cfg)
+            if name == "veeam":
+                collector = cls(cfg, relay_config=relay_cfg if relay_cfg else None)
+            else:
+                collector = cls(cfg)
             results[name] = collector.collect()
         except Exception as exc:
             logger.error("Collector '%s' raised an exception: %s", name, exc)
