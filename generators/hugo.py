@@ -70,6 +70,11 @@ class HugoGenerator:
             self._write("paloalto/routing.json", results["paloalto"].get("routing", {}))
             self._write("paloalto/ha_state.json", results["paloalto"].get("ha_state", {}))
             self._write("paloalto/licenses.json", results["paloalto"].get("licenses", []))
+            self._write("paloalto/tasks.json", results["paloalto"].get("tasks", []))
+            self._write("paloalto/security_policy.json", results["paloalto"].get("security_policy", []))
+
+        if "net" in results:
+            self._write("net/hosts.json", results["net"].get("hosts", []))
 
         self._write("meta/last_update.json", {
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),

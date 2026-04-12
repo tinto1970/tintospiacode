@@ -19,6 +19,7 @@ from collectors.proxmox import ProxmoxCollector
 from collectors.vmware import VMwareCollector
 from collectors.paloalto import PaloAltoCollector
 from collectors.esxi import ESXiCollector
+from collectors.net import NetCollector
 from generators.hugo import HugoGenerator
 from publisher.github import GitHubPublisher
 
@@ -49,6 +50,7 @@ def run_collectors(config: dict) -> dict:
         "vmware": VMwareCollector,
         "paloalto": PaloAltoCollector,
         "esxi": ESXiCollector,
+        "net": NetCollector,
     }
 
     relay_cfg = collectors_cfg.get("rocky_linux_relay", {})
