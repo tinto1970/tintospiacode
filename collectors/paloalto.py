@@ -72,6 +72,8 @@ class PaloAltoCollector:
                     "routing": self._collect_routing_summary(),
                     "ha_state": self._collect_ha_state(),
                     "licenses": self._collect_licenses(),
+                    "tasks": self._collect_tasks(),
+                    "security_policy": self._collect_security_policy(),
                 })
             return data
         except Exception as exc:
@@ -268,6 +270,117 @@ class PaloAltoCollector:
             }
         except Exception:
             return {"enabled": False}
+
+    def _collect_tasks(self, max_tasks: int = 5) -> list:
+        """Last N commit jobs from show jobs all."""
+        try:
+            root = self._op("<show><jobs><all></all></jobs></show>")
+            tasks = []
+            for job in root.findall("result/job"):
+                tasks.append({
+                    "id":           job.findtext("id", ""),
+                    "type":         job.findtext("type", ""),
+                    "user":         job.findtext("user", ""),
+                    "status":       job.findtext("status", ""),
+                    "result":       job.findtext("result", ""),
+                    "start_time":   job.findtext("tenq", ""),
+                    "end_time":     job.findtext("tfin", ""),
+                    "details":      job.findtext("details/line", ""),
+                    "has_warnings": job.find("warnings/line") is not None,
+                })
+            tasks.sort(key=lambda j: int(j["id"]) if j["id"].isdigit() else 0, reverse=True)
+            result = tasks[:max_tasks]
+            logger.debug("PaloAlto: collected %d tasks", len(result))
+            return result
+        except Exception as exc:
+            logger.error("PaloAlto: tasks collection failed — %s", exc)
+            return []
+
+    def _traffic_log_query(self, nlogs: int = 500) -> list:
+        """Submit an async traffic log query and return the XML entries when done."""
+        resp = requests.get(
+            f"{self.host}/api/",
+            params={"key": self.api_key, "type": "log", "log-type": "traffic", "nlogs": str(nlogs)},
+            verify=self.verify_ssl, timeout=30,
+        )
+        root = ET.fromstring(resp.text)
+        job_id = root.findtext("result/job")
+        if not job_id:
+            logger.warning("PaloAlto: log query did not return a job id")
+            return []
+
+        for _ in range(25):
+            time.sleep(3)
+            resp2 = requests.get(
+                f"{self.host}/api/",
+                params={"key": self.api_key, "type": "log", "action": "get", "job-id": job_id},
+                verify=self.verify_ssl, timeout=30,
+            )
+            root2 = ET.fromstring(resp2.text)
+            if root2.findtext("result/job/status") == "FIN":
+                entries = root2.findall("result/log/logs/entry")
+                logger.debug("PaloAlto: traffic log query returned %d entries", len(entries))
+                return entries
+        logger.warning("PaloAlto: traffic log query timed out (job %s)", job_id)
+        return []
+
+    def _collect_security_policy(self) -> list:
+        """Security rules from config + per-rule hit count and apps seen from traffic logs."""
+        try:
+            # --- rules from config API ---
+            resp = requests.get(
+                f"{self.host}/api/",
+                params={
+                    "key": self.api_key, "type": "config", "action": "get",
+                    "xpath": "/config/devices/entry[@name='localhost.localdomain']"
+                             "/vsys/entry[@name='vsys1']/rulebase/security/rules",
+                },
+                verify=self.verify_ssl, timeout=30,
+            )
+            root = ET.fromstring(resp.text)
+
+            rules = {}   # name → rule dict (preserves insertion order = policy order)
+            for entry in root.findall("result/rules/entry"):
+                name = entry.get("name", "")
+                rules[name] = {
+                    "name":        name,
+                    "from":        ", ".join(m.text for m in entry.findall("from/member") if m.text),
+                    "to":          ", ".join(m.text for m in entry.findall("to/member") if m.text),
+                    "source":      ", ".join(m.text for m in entry.findall("source/member") if m.text),
+                    "destination": ", ".join(m.text for m in entry.findall("destination/member") if m.text),
+                    "application": ", ".join(m.text for m in entry.findall("application/member") if m.text),
+                    "action":      entry.findtext("action", ""),
+                    "hit_count":   0,
+                    "apps_seen":   0,
+                    "apps_list":   [],
+                }
+
+            # --- aggregate traffic logs ---
+            entries = self._traffic_log_query(nlogs=500)
+            rule_stats: dict[str, dict] = {}
+            for e in entries:
+                rule = e.findtext("rule", "")
+                app  = e.findtext("app", "")
+                if not rule:
+                    continue
+                if rule not in rule_stats:
+                    rule_stats[rule] = {"count": 0, "apps": set()}
+                rule_stats[rule]["count"] += 1
+                if app and app not in ("incomplete", "not-applicable", "unknown"):
+                    rule_stats[rule]["apps"].add(app)
+
+            for rule_name, stats in rule_stats.items():
+                if rule_name in rules:
+                    rules[rule_name]["hit_count"] = stats["count"]
+                    rules[rule_name]["apps_seen"] = len(stats["apps"])
+                    rules[rule_name]["apps_list"] = sorted(stats["apps"])
+
+            result = list(rules.values())
+            logger.debug("PaloAlto: collected %d security rules", len(result))
+            return result
+        except Exception as exc:
+            logger.error("PaloAlto: security policy collection failed — %s", exc)
+            return []
 
     def _collect_licenses(self) -> list:
         root = self._op("<request><license><info></info></license></request>")
