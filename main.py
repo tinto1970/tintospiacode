@@ -123,6 +123,18 @@ def main():
         publisher = GitHubPublisher(publish_cfg)
         publisher.publish()
 
+    # 5. Demo site: write subset data, build, publish
+    hugo_demo_cfg = config.get("hugo_demo", {})
+    demo_site_path = hugo_demo_cfg.get("site_path", "")
+    if demo_site_path:
+        generator.generate_demo(results, demo_site_path)
+        if hugo_demo_cfg.get("build_after_collect", True):
+            hugo_build(demo_site_path)
+        publish_demo_cfg = config.get("publish_demo", {})
+        if publish_demo_cfg.get("enabled", False):
+            publisher_demo = GitHubPublisher(publish_demo_cfg)
+            publisher_demo.publish()
+
     logger.info("tintospia: run complete")
 
 
