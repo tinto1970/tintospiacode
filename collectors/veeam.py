@@ -246,7 +246,7 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         return jobs
 
     def _collect_jobs_via_relay(self) -> list | None:
-        """Run Get-VeeamJobsRelay.ps1 on rocky01.station via SSH, return parsed jobs."""
+        """Run Get-VeeamJobsRelay.ps1 on the configured relay host via SSH, return parsed jobs."""
         import paramiko
 
         relay_host = self._relay["host"]

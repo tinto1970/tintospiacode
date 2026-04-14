@@ -9,8 +9,8 @@
     EpAgentBackup, VmbApiPolicyTempJob/ProxmoxVE, etc.), and writes
     the result as JSON to stdout.
 
-    Designed to be run on a Linux relay host (rocky01.station) via SSH
-    from tintospia. The caller reads stdout as the JSON payload.
+    Designed to be run on a Linux relay host via SSH from tintospia.
+    The caller reads stdout as the JSON payload.
 
 .PARAMETER ModulePath
     Full path to Veeam.Backup.PowerShell.psd1.
@@ -27,7 +27,7 @@
 .EXAMPLE
     pwsh -NonInteractive -File Get-VeeamJobsRelay.ps1 \
          -ModulePath /opt/veeam/powershell/Veeam.Backup.PowerShell/Veeam.Backup.PowerShell.psd1 \
-         -Server win2022-2.station -Username tintospia -Password 'Password1!'
+         -Server veeamserver -Username veeamuser -Password 'password'
 #>
 param(
     [string]$ModulePath = "/opt/veeam/powershell/Veeam.Backup.PowerShell/Veeam.Backup.PowerShell.psd1",
