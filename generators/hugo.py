@@ -58,6 +58,12 @@ class HugoGenerator:
             self._write("proxmox/storage.json", results["proxmox"].get("storage", []))
             self._write("proxmox/sensors.json", results["proxmox"].get("sensors", []))
 
+        if "vmware" in results:
+            self._write("vmware/hosts.json",      results["vmware"].get("hosts", []))
+            self._write("vmware/vms.json",         results["vmware"].get("vms", []))
+            self._write("vmware/datastores.json",  results["vmware"].get("datastores", []))
+            self._write("vmware/clusters.json",    results["vmware"].get("clusters", []))
+
         if "esxi" in results:
             self._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
 
@@ -104,6 +110,12 @@ class HugoGenerator:
             demo_generator._write("proxmox/containers.json", results["proxmox"].get("containers", []))
             demo_generator._write("proxmox/storage.json", results["proxmox"].get("storage", []))
             demo_generator._write("proxmox/sensors.json", results["proxmox"].get("sensors", []))
+
+        if "vmware" in results:
+            demo_generator._write("vmware/hosts.json",      results["vmware"].get("hosts", []))
+            demo_generator._write("vmware/vms.json",         results["vmware"].get("vms", []))
+            demo_generator._write("vmware/datastores.json",  results["vmware"].get("datastores", []))
+            demo_generator._write("vmware/clusters.json",    results["vmware"].get("clusters", []))
 
         if "esxi" in results:
             demo_generator._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
