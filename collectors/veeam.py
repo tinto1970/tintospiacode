@@ -350,15 +350,17 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         return sessions
 
     def _collect_repositories(self) -> list:
+        # /repositories/states includes capacity data; /repositories does not
         repos = []
-        for r in self._get_all("backupInfrastructure/repositories"):
+        for r in self._get_all("backupInfrastructure/repositories/states"):
             repos.append({
                 "id":            r.get("id"),
                 "name":          r.get("name"),
                 "type":          r.get("type"),
                 "capacity_gb":   round(r.get("capacityGB", 0), 1),
-                "free_space_gb": round(r.get("freeSpaceGB", 0), 1),
+                "free_space_gb": round(r.get("freeGB", 0), 1),
                 "used_space_gb": round(r.get("usedSpaceGB", 0), 1),
+                "is_online":     r.get("isOnline", True),
             })
         logger.debug("Veeam: collected %d repositories", len(repos))
         return repos
