@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timezone
 import requests
 import urllib3
 
@@ -334,8 +335,25 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         finally:
             client.close()
 
+    @staticmethod
+    def _session_duration(start_str: str, end_str: str) -> str:
+        if not start_str or not end_str:
+            return ""
+        try:
+            fmt = "%Y-%m-%dT%H:%M:%S.%f%z"
+            start = datetime.fromisoformat(start_str)
+            end   = datetime.fromisoformat(end_str)
+            secs  = max(0, int((end - start).total_seconds()))
+            h, rem = divmod(secs, 3600)
+            m, s   = divmod(rem, 60)
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        except Exception:
+            return ""
+
     def _normalise_session(self, s: dict) -> dict:
         result_obj = s.get("result") or {}
+        start = s.get("creationTime")
+        end   = s.get("endTime")
         return {
             "id":               s.get("id"),
             "name":             s.get("name"),
@@ -343,8 +361,9 @@ $output | ConvertTo-Json -Depth 3 -AsArray
             "type":             s.get("sessionType"),
             "state":            s.get("state"),
             "result":           result_obj.get("result", "") if isinstance(result_obj, dict) else str(result_obj),
-            "creation_time":    s.get("creationTime"),
-            "end_time":         s.get("endTime"),
+            "creation_time":    start,
+            "end_time":         end,
+            "duration":         self._session_duration(start, end),
             "progress_percent": s.get("progressPercent"),
         }
 
