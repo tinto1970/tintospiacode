@@ -47,6 +47,7 @@ class HugoGenerator:
         if "veeam" in results:
             self._write("veeam/server_info.json", {"host": results["veeam"].get("host", "")})
             self._write("veeam/jobs.json", results["veeam"].get("jobs", []))
+            self._write("veeam/backup_sessions.json", results["veeam"].get("backup_sessions", []))
             self._write("veeam/sessions.json", results["veeam"].get("sessions", []))
             self._write("veeam/repositories.json", results["veeam"].get("repositories", []))
             self._write("veeam/scale_out_repositories.json", results["veeam"].get("scale_out_repositories", []))
@@ -101,6 +102,7 @@ class HugoGenerator:
         if "veeam" in results:
             demo_generator._write("veeam/server_info.json", {"host": results["veeam"].get("host", "")})
             demo_generator._write("veeam/jobs.json", results["veeam"].get("jobs", []))
+            demo_generator._write("veeam/backup_sessions.json", results["veeam"].get("backup_sessions", []))
             demo_generator._write("veeam/sessions.json", results["veeam"].get("sessions", []))
             demo_generator._write("veeam/repositories.json", results["veeam"].get("repositories", []))
             demo_generator._write("veeam/scale_out_repositories.json", results["veeam"].get("scale_out_repositories", []))

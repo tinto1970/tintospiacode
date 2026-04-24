@@ -114,6 +114,7 @@ class VeeamCollector:
             return {
                 "host": host,
                 "jobs": self._collect_jobs(),
+                "backup_sessions": self._collect_backup_sessions(),
                 "sessions": self._collect_sessions(),
                 "repositories": self._collect_repositories(),
                 "scale_out_repositories": self._collect_scale_out_repositories(),
@@ -332,22 +333,38 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         finally:
             client.close()
 
+    def _normalise_session(self, s: dict) -> dict:
+        result_obj = s.get("result") or {}
+        return {
+            "id":               s.get("id"),
+            "name":             s.get("name"),
+            "job_id":           s.get("jobId"),
+            "type":             s.get("sessionType"),
+            "state":            s.get("state"),
+            "result":           result_obj.get("result", "") if isinstance(result_obj, dict) else str(result_obj),
+            "creation_time":    s.get("creationTime"),
+            "end_time":         s.get("endTime"),
+            "progress_percent": s.get("progressPercent"),
+        }
+
     def _collect_sessions(self) -> list:
         data = self._get("sessions", params={"limit": 10, "orderColumn": "CreationTime", "orderAsc": "false"})
+        sessions = [self._normalise_session(s) for s in data.get("data", [])]
+        logger.debug("Veeam: collected %d sessions", len(sessions))
+        return sessions
+
+    _BACKUP_SESSION_TYPES = {"Backup", "BackupCopy", "BackupToTape", "FilesToTape", "EpAgentBackup"}
+
+    def _collect_backup_sessions(self) -> list:
+        """Return the 10 most recent sessions of backup job types only."""
+        data = self._get("sessions", params={"limit": 100, "orderColumn": "CreationTime", "orderAsc": "false"})
         sessions = []
         for s in data.get("data", []):
-            sessions.append({
-                "id":               s.get("id"),
-                "name":             s.get("name"),
-                "job_id":           s.get("jobId"),
-                "type":             s.get("sessionType"),
-                "state":            s.get("state"),
-                "result":           s.get("result"),
-                "creation_time":    s.get("creationTime"),
-                "end_time":         s.get("endTime"),
-                "progress_percent": s.get("progressPercent"),
-            })
-        logger.debug("Veeam: collected %d sessions", len(sessions))
+            if s.get("sessionType") in self._BACKUP_SESSION_TYPES:
+                sessions.append(self._normalise_session(s))
+                if len(sessions) >= 10:
+                    break
+        logger.debug("Veeam: collected %d backup sessions", len(sessions))
         return sessions
 
     def _collect_repositories(self) -> list:
