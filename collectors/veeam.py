@@ -118,6 +118,7 @@ class VeeamCollector:
                 "sessions": self._collect_sessions(),
                 "repositories": self._collect_repositories(),
                 "scale_out_repositories": self._collect_scale_out_repositories(),
+                "proxies": self._collect_proxies(),
                 "managed_servers": self._collect_managed_servers(),
             }
         except Exception as exc:
@@ -437,14 +438,32 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         logger.debug("Veeam: collected %d scale-out repositories", len(sobrs))
         return sobrs
 
+    def _collect_proxies(self) -> list:
+        proxies = []
+        for p in self._get_all("backupInfrastructure/proxies"):
+            srv = p.get("server", {})
+            proxies.append({
+                "id":             p.get("id"),
+                "name":           p.get("name"),
+                "type":           p.get("type"),
+                "host":           srv.get("hostName", ""),
+                "max_tasks":      srv.get("maxTaskCount", 0),
+                "transport_mode": srv.get("transportMode", ""),
+            })
+        logger.debug("Veeam: collected %d proxies", len(proxies))
+        return proxies
+
     def _collect_managed_servers(self) -> list:
         servers = []
         for s in self._get_all("backupInfrastructure/managedServers"):
             servers.append({
-                "id":          s.get("id"),
-                "name":        s.get("name"),
-                "type":        s.get("type"),
-                "description": s.get("description"),
+                "id":            s.get("id"),
+                "name":          s.get("name"),
+                "type":          s.get("type"),
+                "vi_host_type":  s.get("viHostType", ""),
+                "status":        s.get("status", ""),
+                "description":   s.get("description", ""),
+                "is_backup_server": s.get("isBackupServer", False),
             })
         logger.debug("Veeam: collected %d managed servers", len(servers))
         return servers
