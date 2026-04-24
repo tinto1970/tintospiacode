@@ -114,6 +114,7 @@ class VeeamCollector:
             host = re.sub(r"^https?://", "", self.host).split(":")[0]
             return {
                 "host": host,
+                "server_info": self._collect_server_info(),
                 "jobs": self._collect_jobs(),
                 "backup_sessions": self._collect_backup_sessions(),
                 "sessions": self._collect_sessions(),
@@ -536,3 +537,48 @@ $output | ConvertTo-Json -Depth 3 -AsArray
             })
         logger.debug("Veeam: collected %d managed servers", len(servers))
         return servers
+
+    def _collect_server_info(self) -> dict:
+        info = self._get("serverInfo")
+        # Last configuration backup: scan sessions for the most recent ConfigurationBackup
+        cfg_bkp = {}
+        skip = 0
+        page_size = 100
+        while True:
+            data = self._get("sessions", params={
+                "limit": page_size, "skip": skip,
+                "orderColumn": "CreationTime", "orderAsc": "false",
+            })
+            page = data.get("data", [])
+            if not page:
+                break
+            for s in page:
+                if s.get("sessionType") == "ConfigurationBackup":
+                    result_obj = s.get("result") or {}
+                    result_str = result_obj.get("result", "") if isinstance(result_obj, dict) else str(result_obj)
+                    start = s.get("creationTime", "")
+                    end   = s.get("endTime", "")
+                    cfg_bkp = {
+                        "last_run":  start,
+                        "end_time":  end,
+                        "duration":  self._session_duration(start, end),
+                        "result":    result_str,
+                        "message":   result_obj.get("message", "") if isinstance(result_obj, dict) else "",
+                    }
+                    break
+            if cfg_bkp:
+                break
+            total = data.get("pagination", {}).get("total", 0)
+            skip += len(page)
+            if skip >= total:
+                break
+
+        logger.debug("Veeam: collected server info")
+        return {
+            "name":            info.get("name", ""),
+            "build_version":   info.get("buildVersion", ""),
+            "platform":        info.get("platform", ""),
+            "database_vendor": info.get("databaseVendor", ""),
+            "database_version": info.get("sqlServerVersion", ""),
+            "config_backup":   cfg_bkp,
+        }
