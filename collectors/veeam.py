@@ -116,6 +116,7 @@ class VeeamCollector:
                 "jobs": self._collect_jobs(),
                 "sessions": self._collect_sessions(),
                 "repositories": self._collect_repositories(),
+                "scale_out_repositories": self._collect_scale_out_repositories(),
                 "managed_servers": self._collect_managed_servers(),
             }
         except Exception as exc:
@@ -364,6 +365,60 @@ $output | ConvertTo-Json -Depth 3 -AsArray
             })
         logger.debug("Veeam: collected %d repositories", len(repos))
         return repos
+
+    def _collect_scale_out_repositories(self) -> list:
+        # Build id → state map from repository states (already fetched for repositories)
+        state_map = {r["id"]: r for r in self._get_all("backupInfrastructure/repositories/states")}
+
+        # Map SOBR id → job names from REST jobs
+        sobr_jobs: dict = {}
+        for job in self._get_all("jobs"):
+            repo_id = (
+                job.get("storage", {}).get("backupRepositoryId")
+                or job.get("backupRepository", {}).get("backupRepositoryId")
+            )
+            if repo_id:
+                sobr_jobs.setdefault(repo_id, []).append(job.get("name", ""))
+
+        sobrs = []
+        for s in self._get_all("backupInfrastructure/scaleOutRepositories"):
+            extents = []
+            total_cap = total_free = total_used = 0.0
+
+            for pe in s.get("performanceTier", {}).get("performanceExtents", []):
+                ext_id = pe.get("id")
+                state = state_map.get(ext_id, {})
+                cap  = round(state.get("capacityGB", 0), 1)
+                free = round(state.get("freeGB", 0), 1)
+                used = round(state.get("usedSpaceGB", 0), 1)
+                total_cap  += cap
+                total_free += free
+                total_used += used
+                status_list = pe.get("status", [])
+                extents.append({
+                    "name":         pe.get("name", ""),
+                    "type":         state.get("type", ""),
+                    "extent_type":  "Performance",
+                    "capacity_gb":  cap,
+                    "free_space_gb": free,
+                    "used_space_gb": used,
+                    "status":       status_list[0] if status_list else "",
+                    "is_online":    state.get("isOnline", True),
+                })
+
+            sobr_id = s.get("id")
+            sobrs.append({
+                "id":            sobr_id,
+                "name":          s.get("name"),
+                "capacity_gb":   round(total_cap, 1),
+                "free_space_gb": round(total_free, 1),
+                "used_space_gb": round(total_used, 1),
+                "extents":       extents,
+                "jobs":          sobr_jobs.get(sobr_id, []),
+            })
+
+        logger.debug("Veeam: collected %d scale-out repositories", len(sobrs))
+        return sobrs
 
     def _collect_managed_servers(self) -> list:
         servers = []
