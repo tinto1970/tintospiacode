@@ -353,7 +353,7 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         logger.debug("Veeam: collected %d sessions", len(sessions))
         return sessions
 
-    _BACKUP_SESSION_TYPES = {"Backup", "BackupCopy", "BackupToTape", "FilesToTape", "EpAgentBackup"}
+    _BACKUP_SESSION_TYPES = {"BackupJob", "BackupCopyJob", "BackupToTapeJob", "FilesToTapeJob", "EpAgentBackup"}
 
     def _collect_backup_sessions(self) -> list:
         """Return the 10 most recent sessions of backup job types only."""
