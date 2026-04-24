@@ -53,6 +53,7 @@ class HugoGenerator:
             self._write("veeam/scale_out_repositories.json", results["veeam"].get("scale_out_repositories", []))
             self._write("veeam/proxies.json", results["veeam"].get("proxies", []))
             self._write("veeam/managed_servers.json", results["veeam"].get("managed_servers", []))
+            self._write("veeam/malware_events.json", results["veeam"].get("malware_events", []))
 
         if "proxmox" in results:
             self._write("proxmox/nodes.json", results["proxmox"].get("nodes", []))
@@ -109,6 +110,7 @@ class HugoGenerator:
             demo_generator._write("veeam/scale_out_repositories.json", results["veeam"].get("scale_out_repositories", []))
             demo_generator._write("veeam/proxies.json", results["veeam"].get("proxies", []))
             demo_generator._write("veeam/managed_servers.json", results["veeam"].get("managed_servers", []))
+            demo_generator._write("veeam/malware_events.json", results["veeam"].get("malware_events", []))
 
         if "proxmox" in results:
             demo_generator._write("proxmox/nodes.json", results["proxmox"].get("nodes", []))

@@ -121,6 +121,7 @@ class VeeamCollector:
                 "scale_out_repositories": self._collect_scale_out_repositories(),
                 "proxies": self._collect_proxies(),
                 "managed_servers": self._collect_managed_servers(),
+                "malware_events": self._collect_malware_events(),
             }
         except Exception as exc:
             logger.error("Veeam: collection failed — %s", exc)
@@ -484,6 +485,42 @@ $output | ConvertTo-Json -Depth 3 -AsArray
             })
         logger.debug("Veeam: collected %d proxies", len(proxies))
         return proxies
+
+    def _collect_malware_events(self, want: int = 10) -> list:
+        events = []
+        skip = 0
+        page_size = 100
+        while len(events) < want:
+            data = self._get("malwareDetection/events", params={
+                "limit": page_size, "skip": skip,
+                "orderColumn": "CreationTimeUtc", "orderAsc": "false",
+            })
+            page = data.get("data", [])
+            if not page:
+                break
+            for e in page:
+                # Strip the log-path preamble; keep only the detection summary
+                raw_details = e.get("details", "")
+                parts = raw_details.split("\n\n", 1)
+                summary = parts[1].strip() if len(parts) > 1 else raw_details.strip()
+                events.append({
+                    "id":             e.get("id"),
+                    "type":           e.get("type"),
+                    "severity":       e.get("severity"),
+                    "state":          e.get("state"),
+                    "machine":        (e.get("machine") or {}).get("displayName", ""),
+                    "detection_time": e.get("detectionTimeUtc"),
+                    "creation_time":  e.get("creationTimeUtc"),
+                    "details":        summary,
+                })
+                if len(events) >= want:
+                    break
+            total = data.get("pagination", {}).get("total", 0)
+            skip += len(page)
+            if skip >= total:
+                break
+        logger.debug("Veeam: collected %d malware events", len(events))
+        return events
 
     def _collect_managed_servers(self) -> list:
         servers = []
