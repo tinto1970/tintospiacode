@@ -356,15 +356,28 @@ $output | ConvertTo-Json -Depth 3 -AsArray
 
     _BACKUP_SESSION_TYPES = {"BackupJob", "BackupCopyJob", "BackupToTapeJob", "FilesToTapeJob", "EpAgentBackup"}
 
-    def _collect_backup_sessions(self) -> list:
-        """Return the 10 most recent sessions of backup job types only."""
-        data = self._get("sessions", params={"limit": 100, "orderColumn": "CreationTime", "orderAsc": "false"})
+    def _collect_backup_sessions(self, want: int = 10) -> list:
+        """Return the `want` most recent sessions of backup job types, paginating as needed."""
         sessions = []
-        for s in data.get("data", []):
-            if s.get("sessionType") in self._BACKUP_SESSION_TYPES:
-                sessions.append(self._normalise_session(s))
-                if len(sessions) >= 10:
-                    break
+        skip = 0
+        page_size = 100
+        while len(sessions) < want:
+            data = self._get("sessions", params={
+                "limit": page_size, "skip": skip,
+                "orderColumn": "CreationTime", "orderAsc": "false",
+            })
+            page = data.get("data", [])
+            if not page:
+                break
+            for s in page:
+                if s.get("sessionType") in self._BACKUP_SESSION_TYPES:
+                    sessions.append(self._normalise_session(s))
+                    if len(sessions) >= want:
+                        break
+            total = data.get("pagination", {}).get("total", 0)
+            skip += len(page)
+            if skip >= total:
+                break
         logger.debug("Veeam: collected %d backup sessions", len(sessions))
         return sessions
 
