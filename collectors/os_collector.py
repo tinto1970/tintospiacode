@@ -46,7 +46,9 @@ class OSCollector:
 
         entry = {
             "name": name, "host": host, "type": host_type,
-            "disk": [], "services": [], "processes": [], "error": None,
+            "disk": [], "services": [], "processes": [],
+            "uname": "", "cpu_pct": None, "mem_used_gb": None, "mem_total_gb": None,
+            "error": None,
         }
         try:
             if host_type == "windows":
@@ -299,6 +301,9 @@ $result | ConvertTo-Json -Depth 4
             svc_queries  = [c["name"] for c in checks if isinstance(c, dict) and _check_type(c) == "service"]
             proc_queries = [c["name"] for c in checks if isinstance(c, dict) and _check_type(c) == "process"]
 
+            entry["uname"] = self._ssh_cmd(client, "uname -a 2>/dev/null").strip()
+            cpu_mem = self._linux_cpu_mem(client)
+            entry.update(cpu_mem)
             if want_disk:
                 entry["disk"] = self._linux_disk(client)
             for name in svc_queries:
@@ -344,6 +349,26 @@ $result | ConvertTo-Json -Depth 4
                 "pct_used": pct,
             })
         return disks
+
+    def _linux_cpu_mem(self, client) -> dict:
+        out = self._ssh_cmd(
+            client,
+            "vmstat 1 2 2>/dev/null | awk 'END{printf \"%.1f\\n\", 100-$15}'; "
+            "free -b 2>/dev/null | awk '/^Mem:/{printf \"%.2f %.2f\\n\", $3/1073741824, $2/1073741824}'"
+        )
+        lines = out.strip().splitlines()
+        result = {"cpu_pct": None, "mem_used_gb": None, "mem_total_gb": None}
+        try:
+            result["cpu_pct"] = float(lines[0])
+        except (ValueError, IndexError):
+            pass
+        try:
+            parts = lines[1].split()
+            result["mem_used_gb"] = float(parts[0])
+            result["mem_total_gb"] = float(parts[1])
+        except (ValueError, IndexError):
+            pass
+        return result
 
     def _linux_service(self, client, name: str) -> dict:
         out = self._ssh_cmd(client, f"systemctl is-active -- {name!r} 2>/dev/null || echo unknown")

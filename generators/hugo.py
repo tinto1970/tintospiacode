@@ -86,8 +86,12 @@ class HugoGenerator:
             self._write("paloalto/tasks.json", results["paloalto"].get("tasks", []))
             self._write("paloalto/security_policy.json", results["paloalto"].get("security_policy", []))
 
+        if "switchbot" in results:
+            self._write("switchbot/sensors.json", results["switchbot"].get("sensors", []))
+
         if "net" in results:
             self._write("net/hosts.json", results["net"].get("hosts", []))
+            self._write("net/dns_servers.json", results["net"].get("dns_servers", []))
 
         if "os" in results:
             self._write("os/hosts.json", results["os"].get("hosts", []))
@@ -133,6 +137,9 @@ class HugoGenerator:
 
         if "esxi" in results:
             demo_generator._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
+
+        if "switchbot" in results:
+            demo_generator._write("switchbot/sensors.json", results["switchbot"].get("sensors", []))
 
         # Sources list limited to what's actually in the demo
         demo_sources = [s for s in results.keys() if s in ("veeam", "proxmox", "esxi")]

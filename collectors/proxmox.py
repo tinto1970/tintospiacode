@@ -14,19 +14,30 @@ logger = logging.getLogger(__name__)
 
 class ProxmoxCollector:
     def __init__(self, config: dict):
-        self.host = config["host"].rstrip("/")
-        self.username = config["username"]
-        self.password = config["password"]
-        self.verify_ssl = config.get("verify_ssl", False)
-        self.ssh_host = config.get("ssh_host")       # hostname/IP for SSH (optional, falls back to API host)
-        self.ssh_user = config.get("ssh_user", "root")
-        self.ssh_password = config.get("ssh_password", self.password)
-        self.ssh_port = config.get("ssh_port", 22)
-        self._ticket = None
-        self._csrf = None
-
-        if not self.verify_ssl:
+        if "hosts" in config:
+            self._host_configs = config["hosts"]
+        else:
+            self._host_configs = [config]
+        if not config.get("verify_ssl", False):
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # per-host state, set before each collection
+        self.host = self.username = self.password = None
+        self.ssh_host = self.ssh_user = self.ssh_password = None
+        self.ssh_port = 22
+        self._ticket = self._csrf = None
+
+    def _init_host(self, cfg: dict):
+        self.host       = cfg["host"].rstrip("/")
+        self.username   = cfg["username"]
+        self.password   = cfg["password"]
+        self.verify_ssl = cfg.get("verify_ssl", False)
+        self.ssh_host   = cfg.get("ssh_host")
+        self.ssh_user   = cfg.get("ssh_user", "root")
+        self.ssh_password = cfg.get("ssh_password", self.password)
+        self.ssh_port   = int(cfg.get("ssh_port", 22))
+        self.sensors_enabled = cfg.get("sensors", True)
+        self._ticket    = None
+        self._csrf      = None
 
     # ------------------------------------------------------------------
     # Authentication
@@ -65,30 +76,24 @@ class ProxmoxCollector:
     # ------------------------------------------------------------------
 
     def collect(self) -> dict:
-        logger.info("Proxmox: starting collection")
-        try:
-            self._login()
-            nodes = self._collect_nodes()
-            vms = []
-            containers = []
-            storage = []
-            sensors = []
-            for node in nodes:
-                node_name = node["node"]
-                vms.extend(self._collect_vms(node_name))
-                containers.extend(self._collect_containers(node_name))
-                storage.extend(self._collect_storage(node_name))
-                sensors.extend(self._collect_sensors(node_name))
-            return {
-                "nodes": nodes,
-                "vms": vms,
-                "containers": containers,
-                "storage": storage,
-                "sensors": sensors,
-            }
-        except Exception as exc:
-            logger.error("Proxmox: collection failed — %s", exc)
-            return {"error": str(exc)}
+        merged = {"nodes": [], "vms": [], "containers": [], "storage": [], "sensors": []}
+        for host_cfg in self._host_configs:
+            self._init_host(host_cfg)
+            logger.info("Proxmox: starting collection on %s", self.host)
+            try:
+                self._login()
+                nodes = self._collect_nodes()
+                for node in nodes:
+                    node_name = node["node"]
+                    merged["vms"].extend(self._collect_vms(node_name))
+                    merged["containers"].extend(self._collect_containers(node_name))
+                    merged["storage"].extend(self._collect_storage(node_name))
+                    if self.sensors_enabled:
+                        merged["sensors"].extend(self._collect_sensors(node_name))
+                merged["nodes"].extend(nodes)
+            except Exception as exc:
+                logger.error("Proxmox: collection failed on %s — %s", self.host, exc)
+        return merged
 
     # ------------------------------------------------------------------
     # SSH helpers

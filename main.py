@@ -21,6 +21,7 @@ from collectors.paloalto import PaloAltoCollector
 from collectors.esxi import ESXiCollector
 from collectors.net import NetCollector
 from collectors.os_collector import OSCollector
+from collectors.switchbot import SwitchBotCollector
 from generators.hugo import HugoGenerator
 from publisher.github import GitHubPublisher
 
@@ -51,8 +52,9 @@ def run_collectors(config: dict) -> dict:
         "vmware": VMwareCollector,
         "paloalto": PaloAltoCollector,
         "esxi": ESXiCollector,
-        "net": NetCollector,
-        "os":  OSCollector,
+        "net":       NetCollector,
+        "os":        OSCollector,
+        "switchbot": SwitchBotCollector,
     }
 
     relay_cfg = collectors_cfg.get("rocky_linux_relay", {})

@@ -33,6 +33,7 @@ DEFAULT_PORTS = {
 class NetCollector:
     def __init__(self, config: dict):
         self.hosts = config.get("hosts", [])
+        self.dns_servers = config.get("dns_servers", [])
         self.timeout = int(config.get("timeout", 3))
 
     def collect(self) -> dict:
@@ -61,7 +62,15 @@ class NetCollector:
 
             results.append({"name": name, "host": host, "checks": checks})
 
-        return {"hosts": results}
+        dns_results = []
+        for srv in self.dns_servers:
+            host = srv["host"]
+            name = srv.get("name", host)
+            check = self._check_ping(host)
+            logger.debug("Net DNS: %s → %s (%s)", host, check["status"], check.get("detail", ""))
+            dns_results.append({"name": name, "host": host, "ping": check})
+
+        return {"hosts": results, "dns_servers": dns_results}
 
     def _run_check(self, host: str, check_type: str, port: int | None) -> dict:
         if check_type == "ping":
