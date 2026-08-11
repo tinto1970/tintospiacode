@@ -57,6 +57,7 @@ class VeeamCollector:
         self.jobs_export_path = config.get("jobs_export_path", "")
         # Optional SSH relay config (rocky_linux_relay section from top-level config)
         self._relay = relay_config or {}
+        self._metrics_url = config.get("metrics_url", "")
         self._token = None
 
         if not self.verify_ssl:
@@ -114,6 +115,7 @@ class VeeamCollector:
             host = re.sub(r"^https?://", "", self.host).split(":")[0]
             return {
                 "host": host,
+                "server_metrics": self._collect_server_metrics(),
                 "server_info": self._collect_server_info(),
                 "jobs": self._collect_jobs(),
                 "backup_sessions": self._collect_backup_sessions(),
@@ -127,6 +129,99 @@ class VeeamCollector:
         except Exception as exc:
             logger.error("Veeam: collection failed — %s", exc)
             return {"error": str(exc)}
+
+    def _collect_server_metrics(self) -> dict:
+        if not self._metrics_url:
+            return {}
+        try:
+            resp = requests.get(self._metrics_url, verify=self.verify_ssl, timeout=10)
+            resp.raise_for_status()
+            return self._parse_prometheus(resp.text)
+        except Exception as exc:
+            logger.warning("Veeam: metrics fetch failed — %s", exc)
+            return {"error": str(exc)[:200]}
+
+    def _parse_prometheus(self, text: str) -> dict:
+        metrics = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("#") or not line:
+                continue
+            m = re.match(r"^([a-zA-Z_:][a-zA-Z0-9_:]*(?:\{[^}]*\})?) (.+)$", line)
+            if m:
+                metrics[m.group(1)] = m.group(2)
+
+        def flt(v, default=None):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return default
+
+        # CPU (historical average since boot from cumulative counters)
+        cpu_idle  = sum(flt(v, 0) for k, v in metrics.items()
+                        if "node_cpu_seconds_total" in k and 'mode="idle"' in k)
+        cpu_total = sum(flt(v, 0) for k, v in metrics.items()
+                        if "node_cpu_seconds_total" in k)
+        cpu_pct = round((1 - cpu_idle / cpu_total) * 100, 1) if cpu_total else None
+
+        # Load
+        load1  = flt(metrics.get("node_load1"))
+        load5  = flt(metrics.get("node_load5"))
+        load15 = flt(metrics.get("node_load15"))
+
+        # RAM
+        mem_total = flt(metrics.get("node_memory_MemTotal_bytes"), 0)
+        mem_avail = flt(metrics.get("node_memory_MemAvailable_bytes"), 0)
+        mem_used  = mem_total - mem_avail
+        mem_pct   = round(mem_used / mem_total * 100) if mem_total else None
+
+        # Filesystems (skip virtual/small)
+        skip_fstypes = {"tmpfs", "devtmpfs", "squashfs", "overlay", "shm", "cgroup2", "pstore"}
+        filesystems = []
+        for k, v in metrics.items():
+            if "node_filesystem_size_bytes{" not in k:
+                continue
+            fstype_m = re.search(r'fstype="([^"]+)"', k)
+            if fstype_m and fstype_m.group(1) in skip_fstypes:
+                continue
+            mount_m = re.search(r'mountpoint="([^"]+)"', k)
+            if not mount_m:
+                continue
+            size = flt(v, 0)
+            if size < 1e9:
+                continue
+            avail_key = k.replace("size_bytes", "avail_bytes")
+            avail = flt(metrics.get(avail_key), 0)
+            used  = size - avail
+            filesystems.append({
+                "mount":    mount_m.group(1),
+                "size_gb":  round(size  / 1024**3, 1),
+                "used_gb":  round(used  / 1024**3, 1),
+                "avail_gb": round(avail / 1024**3, 1),
+                "pct_used": round(used / size * 100) if size else 0,
+            })
+        filesystems.sort(key=lambda x: x["mount"])
+
+        # Veeam services stopped
+        services_stopped = sorted(
+            re.search(r'name="([^"]+)"', k).group(1)
+            for k, v in metrics.items()
+            if "veeam_service_state{" in k and v.strip() == "0"
+            and re.search(r'name="([^"]+)"', k)
+        )
+
+        return {
+            "cpu_pct":        cpu_pct,
+            "load1":          load1,
+            "load5":          load5,
+            "load15":         load15,
+            "mem_total_gb":   round(mem_total / 1024**3, 1) if mem_total else None,
+            "mem_used_gb":    round(mem_used  / 1024**3, 1) if mem_total else None,
+            "mem_pct":        mem_pct,
+            "filesystems":    filesystems,
+            "services_stopped": services_stopped,
+            "error":          None,
+        }
 
     def _collect_jobs(self) -> list:
         # --- strategy 1: WinRM ---
