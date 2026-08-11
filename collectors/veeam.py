@@ -257,17 +257,33 @@ class VeeamCollector:
 
         # --- strategy 4: REST API (no ProxmoxVE jobs) ---
         logger.warning("Veeam: no WinRM/relay/export available — using REST API (ProxmoxVE jobs will be missing)")
+
+        # Build jobId → most recent session map to populate last run info
+        last_session: dict = {}
+        try:
+            data = self._get("sessions", params={"limit": 200, "orderColumn": "CreationTime", "orderAsc": "false"})
+            for s in data.get("data", []):
+                jid = s.get("jobId")
+                if jid and jid not in last_session:
+                    last_session[jid] = s
+        except Exception as exc:
+            logger.warning("Veeam: could not fetch sessions for job last-run info — %s", exc)
+
         jobs = []
         for j in self._get_all("jobs"):
+            jid = j.get("id", "")
+            s = last_session.get(jid, {})
+            result_obj = s.get("result") or {}
+            result_str = result_obj.get("result", "") if isinstance(result_obj, dict) else str(result_obj)
             jobs.append({
                 "name":             j.get("name", ""),
                 "type":             j.get("type", ""),
                 "is_disabled":      j.get("isDisabled", False),
                 "schedule_enabled": j.get("scheduleEnabled", False),
-                "last_result":      "",
-                "last_end_time":    "",
-                "last_start_time":  "",
-                "last_state":       "",
+                "last_result":      result_str,
+                "last_end_time":    s.get("endTime", ""),
+                "last_start_time":  s.get("creationTime", ""),
+                "last_state":       s.get("state", ""),
             })
         logger.debug("Veeam: collected %d jobs via REST", len(jobs))
         return jobs
