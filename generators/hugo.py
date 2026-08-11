@@ -110,6 +110,7 @@ class HugoGenerator:
         demo_generator = HugoGenerator(demo_site_path)
 
         if "veeam" in results:
+            demo_generator._write("veeam/server_metrics.json", results["veeam"].get("server_metrics", {}))
             demo_generator._write("veeam/server_info.json", {
                 "host": results["veeam"].get("host", ""),
                 **results["veeam"].get("server_info", {}),
