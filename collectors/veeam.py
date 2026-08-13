@@ -275,11 +275,13 @@ class VeeamCollector:
             s = last_session.get(jid, {})
             result_obj = s.get("result") or {}
             result_str = result_obj.get("result", "") if isinstance(result_obj, dict) else str(result_obj)
+            sched = j.get("schedule") or {}
             jobs.append({
                 "name":             j.get("name", ""),
                 "type":             j.get("type", ""),
                 "is_disabled":      j.get("isDisabled", False),
-                "schedule_enabled": j.get("scheduleEnabled", False),
+                "schedule_enabled": sched.get("runAutomatically", False),
+                "schedule_desc":    self._schedule_desc(sched),
                 "last_result":      result_str,
                 "last_end_time":    s.get("endTime", ""),
                 "last_start_time":  s.get("creationTime", ""),
@@ -287,6 +289,35 @@ class VeeamCollector:
             })
         logger.debug("Veeam: collected %d jobs via REST", len(jobs))
         return jobs
+
+    @staticmethod
+    def _schedule_desc(sched: dict) -> str:
+        if not sched.get("runAutomatically"):
+            return ""
+        daily = sched.get("daily") or {}
+        if daily.get("isEnabled"):
+            kind = daily.get("dailyKind", "")
+            t = daily.get("localTime", "")
+            label = {"Everyday": "Daily", "Weekdays": "Weekdays", "Weekends": "Weekends"}.get(kind, kind)
+            return f"{label} {t}".strip()
+        weekly = sched.get("weekly") or {}
+        if weekly.get("isEnabled"):
+            days = ", ".join(weekly.get("days", []))
+            t = weekly.get("localTime", "")
+            return f"Weekly ({days}) {t}".strip()
+        monthly = sched.get("monthly") or {}
+        if monthly.get("isEnabled"):
+            return f"Monthly {monthly.get('localTime', '')}".strip()
+        periodically = sched.get("periodically") or {}
+        if periodically.get("isEnabled"):
+            freq = periodically.get("frequency", "")
+            kind = periodically.get("periodicallyKind", "")
+            return f"Every {freq} {kind}"
+        if (sched.get("continuously") or {}).get("isEnabled"):
+            return "Continuously"
+        if (sched.get("afterThisJob") or {}).get("isEnabled"):
+            return "After job"
+        return "Enabled"
 
     def _collect_jobs_via_winrm(self) -> list | None:
         """Run Get-VBRJob PowerShell directly on the Veeam server via WinRM, return parsed jobs."""
