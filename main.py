@@ -22,6 +22,7 @@ from collectors.esxi import ESXiCollector
 from collectors.net import NetCollector
 from collectors.os_collector import OSCollector
 from collectors.switchbot import SwitchBotCollector
+from collectors.gitvault import GitVaultCollector
 from generators.hugo import HugoGenerator
 from publisher.github import GitHubPublisher
 
@@ -55,6 +56,7 @@ def run_collectors(config: dict) -> dict:
         "net":       NetCollector,
         "os":        OSCollector,
         "switchbot": SwitchBotCollector,
+        "gitvault": GitVaultCollector,
     }
 
     relay_cfg = collectors_cfg.get("rocky_linux_relay", {})

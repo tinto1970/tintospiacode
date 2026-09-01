@@ -90,6 +90,10 @@ class HugoGenerator:
         if "switchbot" in results:
             self._write("switchbot/sensors.json", results["switchbot"].get("sensors", []))
 
+        if "gitvault" in results:
+            self._write("gitvault/last_backup.json", results["gitvault"].get("last_backup", {}))
+            self._write("gitvault/verify.json", results["gitvault"].get("verify", {}))
+
         if "net" in results:
             self._write("net/hosts.json", results["net"].get("hosts", []))
             self._write("net/dns_servers.json", results["net"].get("dns_servers", []))
@@ -142,6 +146,10 @@ class HugoGenerator:
 
         if "switchbot" in results:
             demo_generator._write("switchbot/sensors.json", results["switchbot"].get("sensors", []))
+
+        if "gitvault" in results:
+            demo_generator._write("gitvault/last_backup.json", results["gitvault"].get("last_backup", {}))
+            demo_generator._write("gitvault/verify.json", results["gitvault"].get("verify", {}))
 
         # Sources list limited to what's actually in the demo
         demo_sources = [s for s in results.keys() if s in ("veeam", "proxmox", "esxi")]
