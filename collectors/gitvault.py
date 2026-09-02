@@ -13,6 +13,14 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+
+def _fmt_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+
+
 # Regex for a timestamped log line: "YYYY-MM-DD HH:MM:SS TOKEN rest"
 _LINE_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(OK|!!|\S+)\s+(.*)$"
@@ -270,20 +278,31 @@ class GitVaultCollector:
         snap_root = os.path.join(self.backup_root, "snapshots")
         try:
             snap_entries = []
+            total_bytes = 0
             for d in sorted(os.listdir(snap_root)):
                 date_dir = os.path.join(snap_root, d)
                 if not os.path.isdir(date_dir):
                     continue
                 try:
-                    bundle_count = sum(
-                        1 for f in os.listdir(date_dir) if f.endswith(".bundle")
-                    )
+                    bundle_count = 0
+                    for f in os.listdir(date_dir):
+                        fpath = os.path.join(date_dir, f)
+                        if f.endswith(".bundle"):
+                            bundle_count += 1
+                        try:
+                            total_bytes += os.path.getsize(fpath)
+                        except OSError:
+                            pass
                 except OSError:
                     bundle_count = 0
                 snap_entries.append({"date": d, "bundles": bundle_count})
         except OSError:
             snap_entries = []
-        result["snapshots"] = snap_entries
+            total_bytes = 0
+        result["snapshots"] = {
+            "dates": snap_entries,
+            "total_size": _fmt_bytes(total_bytes),
+        }
 
         # --- Live verify ---
         if self.verify_script and os.path.isfile(self.verify_script):
