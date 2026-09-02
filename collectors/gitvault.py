@@ -269,13 +269,21 @@ class GitVaultCollector:
         # --- Snapshot dates ---
         snap_root = os.path.join(self.backup_root, "snapshots")
         try:
-            snap_dates = sorted(
-                d for d in os.listdir(snap_root)
-                if os.path.isdir(os.path.join(snap_root, d))
-            )
+            snap_entries = []
+            for d in sorted(os.listdir(snap_root)):
+                date_dir = os.path.join(snap_root, d)
+                if not os.path.isdir(date_dir):
+                    continue
+                try:
+                    bundle_count = sum(
+                        1 for f in os.listdir(date_dir) if f.endswith(".bundle")
+                    )
+                except OSError:
+                    bundle_count = 0
+                snap_entries.append({"date": d, "bundles": bundle_count})
         except OSError:
-            snap_dates = []
-        result["snapshots"] = snap_dates
+            snap_entries = []
+        result["snapshots"] = snap_entries
 
         # --- Live verify ---
         if self.verify_script and os.path.isfile(self.verify_script):
