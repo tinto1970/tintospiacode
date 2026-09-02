@@ -266,6 +266,17 @@ class GitVaultCollector:
             result["last_backup"] = {"error": "no log files found"}
             result["log_file"] = ""
 
+        # --- Snapshot dates ---
+        snap_root = os.path.join(self.backup_root, "snapshots")
+        try:
+            snap_dates = sorted(
+                d for d in os.listdir(snap_root)
+                if os.path.isdir(os.path.join(snap_root, d))
+            )
+        except OSError:
+            snap_dates = []
+        result["snapshots"] = snap_dates
+
         # --- Live verify ---
         if self.verify_script and os.path.isfile(self.verify_script):
             try:
