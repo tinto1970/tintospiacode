@@ -93,7 +93,7 @@ class HugoGenerator:
         if "gitvault" in results:
             self._write("gitvault/last_backup.json", results["gitvault"].get("last_backup", {}))
             self._write("gitvault/verify.json", results["gitvault"].get("verify", {}))
-            self._write("gitvault/snapshots.json", {"dates": results["gitvault"].get("snapshots", [])})
+            self._write("gitvault/snapshots.json", results["gitvault"].get("snapshots", {}))
 
         if "net" in results:
             self._write("net/hosts.json", results["net"].get("hosts", []))
@@ -151,7 +151,7 @@ class HugoGenerator:
         if "gitvault" in results:
             demo_generator._write("gitvault/last_backup.json", results["gitvault"].get("last_backup", {}))
             demo_generator._write("gitvault/verify.json", results["gitvault"].get("verify", {}))
-            demo_generator._write("gitvault/snapshots.json", {"dates": results["gitvault"].get("snapshots", [])})
+            demo_generator._write("gitvault/snapshots.json", results["gitvault"].get("snapshots", {}))
 
         # Sources list limited to what's actually in the demo
         demo_sources = [s for s in results.keys() if s in ("veeam", "proxmox", "esxi")]
