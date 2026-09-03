@@ -131,11 +131,15 @@ def _parse_log(log_path: str) -> dict:
                     "note":   repos_match.group(2),
                 })
 
+    def _to_int(val) -> int:
+        m = re.match(r"\d+", str(val).strip())
+        return int(m.group()) if m else 0
+
     return {
         "timestamp":    summary.get("timestamp", ""),
-        "ok":           int(summary.get("ok", 0)),
-        "skipped":      int(summary.get("skipped", 0)),
-        "failed":       int(summary.get("failed", 0)),
+        "ok":           _to_int(summary.get("ok", 0)),
+        "skipped":      _to_int(summary.get("skipped", 0)),
+        "failed":       _to_int(summary.get("failed", 0)),
         "elapsed":      summary.get("elapsed", ""),
         "total_on_disk": summary.get("total_on_disk", ""),
         "repos":        repos,
