@@ -27,6 +27,13 @@ import urllib3
 logger = logging.getLogger(__name__)
 
 
+def _fmt_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+
+
 def _normalise_ps_jobs(raw: list) -> list:
     """Normalise a list of job dicts from any PS script source into the tintospia schema."""
     jobs = []
@@ -120,6 +127,7 @@ class VeeamCollector:
                 "jobs": self._collect_jobs(),
                 "backup_sessions": self._collect_backup_sessions(),
                 "sessions": self._collect_sessions(),
+                "restore_points": self._collect_restore_points(),
                 "repositories": self._collect_repositories(),
                 "scale_out_repositories": self._collect_scale_out_repositories(),
                 "proxies": self._collect_proxies(),
@@ -545,20 +553,70 @@ $output | ConvertTo-Json -Depth 3 -AsArray
         return sessions
 
     def _collect_repositories(self) -> list:
-        # /repositories/states includes capacity data; /repositories does not
+        # /repositories/states includes capacity data; /repositories has governance info
+        gov_map = {}
+        for r in self._get_all("backupInfrastructure/repositories"):
+            inner = r.get("repository") or {}
+            gov_map[r.get("id")] = {
+                "governance_enabled": inner.get("enableGovernanceMode", False),
+                "governance_days":    inner.get("governanceModeRetentionDays", 0),
+            }
         repos = []
         for r in self._get_all("backupInfrastructure/repositories/states"):
+            gov = gov_map.get(r.get("id"), {})
             repos.append({
-                "id":            r.get("id"),
-                "name":          r.get("name"),
-                "type":          r.get("type"),
-                "capacity_gb":   round(r.get("capacityGB", 0), 1),
-                "free_space_gb": round(r.get("freeGB", 0), 1),
-                "used_space_gb": round(r.get("usedSpaceGB", 0), 1),
-                "is_online":     r.get("isOnline", True),
+                "id":                  r.get("id"),
+                "name":                r.get("name"),
+                "type":                r.get("type"),
+                "capacity_gb":         round(r.get("capacityGB", 0), 1),
+                "free_space_gb":       round(r.get("freeGB", 0), 1),
+                "used_space_gb":       round(r.get("usedSpaceGB", 0), 1),
+                "is_online":           r.get("isOnline", True),
+                "governance_enabled":  gov.get("governance_enabled", False),
+                "governance_days":     gov.get("governance_days", 0),
             })
         logger.debug("Veeam: collected %d repositories", len(repos))
         return repos
+
+    def _collect_restore_points(self) -> dict:
+        try:
+            # Per-VM summaries
+            objects_raw = self._get_all("backupObjects")
+            objects = []
+            total_size = 0
+            for o in objects_raw:
+                sz = o.get("size", 0) or 0
+                total_size += sz
+                objects.append({
+                    "name":           o.get("name", ""),
+                    "platform":       o.get("platformName", ""),
+                    "type":           o.get("type", ""),
+                    "restore_points": o.get("restorePointsCount", 0),
+                    "size_human":     _fmt_bytes(sz),
+                    "last_run_failed": o.get("lastRunFailed", False),
+                })
+            # Individual restore points (ordered newest first)
+            points_raw = self._get_all("restorePoints")
+            points_raw.sort(key=lambda p: p.get("creationTime", ""), reverse=True)
+            points = []
+            for p in points_raw:
+                points.append({
+                    "name":          p.get("name", ""),
+                    "platform":      p.get("platformName", ""),
+                    "type":          p.get("type", ""),
+                    "created":       p.get("creationTime", "")[:10],
+                    "malware":       p.get("malwareStatus", ""),
+                    "original_size": _fmt_bytes(p.get("originalSize", 0) or 0),
+                })
+            return {
+                "objects":          objects,
+                "points":           points,
+                "total_count":      len(points),
+                "total_size_human": _fmt_bytes(total_size),
+            }
+        except Exception as exc:
+            logger.warning("Veeam: restore points collection failed — %s", exc)
+            return {"error": str(exc)}
 
     def _collect_scale_out_repositories(self) -> list:
         # Build id → state map from repository states (already fetched for repositories)
