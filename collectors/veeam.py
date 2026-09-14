@@ -580,6 +580,21 @@ $output | ConvertTo-Json -Depth 3 -AsArray
 
     def _collect_restore_points(self) -> dict:
         try:
+            # Governance info per repository (reuse data already fetched for repos)
+            gov_map: dict = {}  # repositoryId → governance_days (0 = disabled)
+            for r in self._get_all("backupInfrastructure/repositories"):
+                inner = r.get("repository") or {}
+                if inner.get("enableGovernanceMode"):
+                    gov_map[r.get("id")] = inner.get("governanceModeRetentionDays", 0)
+
+            # Backup id → repository id mapping
+            backup_repo: dict = {}  # backupId → repositoryId
+            for b in self._get_all("backups"):
+                bid = b.get("id")
+                rid = b.get("repositoryId")
+                if bid and rid:
+                    backup_repo[bid] = rid
+
             # Per-VM summaries
             objects_raw = self._get_all("backupObjects")
             objects = []
@@ -588,25 +603,40 @@ $output | ConvertTo-Json -Depth 3 -AsArray
                 sz = o.get("size", 0) or 0
                 total_size += sz
                 objects.append({
-                    "name":           o.get("name", ""),
-                    "platform":       o.get("platformName", ""),
-                    "type":           o.get("type", ""),
-                    "restore_points": o.get("restorePointsCount", 0),
-                    "size_human":     _fmt_bytes(sz),
+                    "name":            o.get("name", ""),
+                    "platform":        o.get("platformName", ""),
+                    "type":            o.get("type", ""),
+                    "restore_points":  o.get("restorePointsCount", 0),
+                    "size_human":      _fmt_bytes(sz),
                     "last_run_failed": o.get("lastRunFailed", False),
                 })
+
             # Individual restore points (ordered newest first)
             points_raw = self._get_all("restorePoints")
             points_raw.sort(key=lambda p: p.get("creationTime", ""), reverse=True)
             points = []
             for p in points_raw:
+                created_str = p.get("creationTime", "")
+                # Calculate immutability expiry: creationTime + governance_days
+                immut_expiry = ""
+                repo_id = backup_repo.get(p.get("backupId", ""))
+                gov_days = gov_map.get(repo_id, 0) if repo_id else 0
+                if gov_days and created_str:
+                    try:
+                        from datetime import timedelta
+                        ct = datetime.fromisoformat(created_str)
+                        expiry = ct + timedelta(days=gov_days)
+                        immut_expiry = expiry.strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
                 points.append({
                     "name":          p.get("name", ""),
                     "platform":      p.get("platformName", ""),
                     "type":          p.get("type", ""),
-                    "created":       p.get("creationTime", "")[:10],
+                    "created":       created_str[:10],
                     "malware":       p.get("malwareStatus", ""),
                     "original_size": _fmt_bytes(p.get("originalSize", 0) or 0),
+                    "immut_expiry":  immut_expiry,
                 })
             return {
                 "objects":          objects,
