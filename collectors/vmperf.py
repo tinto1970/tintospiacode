@@ -33,12 +33,13 @@ class VMPerfAccumulator:
                 if not name:
                     continue
                 snapshot[name] = {
-                    "host":         host,
-                    "cpu_pct":      vm.get("cpu_pct"),
-                    "ram_gb":       vm.get("ram_gb"),
-                    "ram_total_gb": vm.get("ram_total_gb"),
-                    "disk_gb":      vm.get("disk_gb"),
-                    "power":        vm.get("power", ""),
+                    "host":          host,
+                    "cpu_pct":       vm.get("cpu_pct"),
+                    "ram_gb":        vm.get("ram_gb"),
+                    "ram_total_gb":  vm.get("ram_total_gb"),
+                    "disk_gb":       vm.get("disk_gb"),
+                    "disk_total_gb": vm.get("disk_total_gb"),
+                    "power":         vm.get("power", ""),
                 }
 
         samples = []
