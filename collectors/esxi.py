@@ -117,11 +117,13 @@ class ESXiCollector:
             client = None
             try:
                 client = self._connect(host_cfg)
+                vms = self._collect_vms(client)
                 results.append({
                     "host":        host_addr,
                     "system_info": self._collect_system_info(client, host_addr),
                     "sensors":     self._collect_sensors(client),
-                    "vms":         self._collect_vms(client),
+                    "vms":         vms,
+                    "vm_perf":     self._collect_vm_perf(client, vms),
                     "datastores":  self._collect_datastores(client),
                     "nics":        self._collect_nics(client),
                 })
@@ -251,6 +253,53 @@ class ESXiCollector:
 
         logger.debug("ESXi: collected %d VMs (%d running)", len(vms), len(running_names))
         return vms
+
+    def _collect_vm_perf(self, client, vms: list) -> list:
+        """Collect CPU/RAM/disk quick stats for each VM via vim-cmd get.summary."""
+        perf = []
+        for vm in vms:
+            vmid = vm.get("vmid")
+            if vmid is None:
+                continue
+            try:
+                raw = self._run(client, f"vim-cmd vmsvc/get.summary {vmid} 2>/dev/null")
+            except Exception:
+                continue
+
+            def grab(key):
+                m = re.search(rf'\b{re.escape(key)}\s*=\s*([^,\n]+)', raw)
+                if not m:
+                    return None
+                val = m.group(1).strip().rstrip(',')
+                return None if val in ('<unset>', 'null', 'false', '') else val
+
+            def safe_int(v):
+                try:
+                    return int(v) if v is not None else None
+                except (ValueError, TypeError):
+                    return None
+
+            cpu_mhz      = safe_int(grab('overallCpuUsage'))
+            cpu_max_mhz  = safe_int(grab('maxCpuUsage'))
+            ram_mb       = safe_int(grab('guestMemoryUsage'))
+            ram_total_mb = safe_int(grab('memorySizeMB'))
+
+            disk_m = re.search(r'storage\s*=.*?committed\s*=\s*(\d+)', raw, re.DOTALL)
+            disk_bytes = int(disk_m.group(1)) if disk_m else 0
+
+            cpu_pct = round(cpu_mhz / cpu_max_mhz * 100, 1) if (cpu_mhz is not None and cpu_max_mhz) else None
+            ram_pct = round(ram_mb / ram_total_mb * 100, 1) if (ram_mb is not None and ram_total_mb) else None
+            disk_gb = round(disk_bytes / 1024 ** 3, 1)
+
+            perf.append({
+                "name":    vm["name"],
+                "cpu_pct": cpu_pct,
+                "ram_pct": ram_pct,
+                "disk_gb": disk_gb,
+                "power":   vm.get("status", ""),
+            })
+        logger.debug("ESXi: collected perf for %d VMs", len(perf))
+        return perf
 
     def _collect_datastores(self, client) -> list:
         raw = self._run(client, "esxcli --formatter=csv storage filesystem list")

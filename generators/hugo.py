@@ -76,6 +76,9 @@ class HugoGenerator:
         if "esxi" in results:
             self._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
 
+        if "vmperf" in results:
+            self._write("vmware/vm_perf.json", results["vmperf"])
+
         if "paloalto" in results:
             self._write("paloalto/server_info.json", {"host": results["paloalto"].get("host", "")})
             self._write("paloalto/environmentals.json", results["paloalto"].get("environmentals", {}))
@@ -146,6 +149,9 @@ class HugoGenerator:
 
         if "esxi" in results:
             demo_generator._write("vmware/esxi_hosts.json", results["esxi"].get("hosts", []))
+
+        if "vmperf" in results:
+            demo_generator._write("vmware/vm_perf.json", results["vmperf"])
 
         if "switchbot" in results:
             demo_generator._write("switchbot/sensors.json", results["switchbot"].get("sensors", []))

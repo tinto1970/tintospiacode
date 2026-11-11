@@ -23,6 +23,7 @@ from collectors.net import NetCollector
 from collectors.os_collector import OSCollector
 from collectors.switchbot import SwitchBotCollector
 from collectors.gitvault import GitVaultCollector
+from collectors.vmperf import VMPerfAccumulator
 from generators.hugo import HugoGenerator
 from publisher.github import GitHubPublisher
 
@@ -102,6 +103,12 @@ def main():
 
     # 1. Collect data from all enabled sources
     results = run_collectors(config)
+
+    # 1b. Accumulate ESXi VM performance history (rolling 48h file)
+    if "esxi" in results and not results["esxi"].get("error"):
+        vmperf_cfg = config.get("collectors", {}).get("vmperf", {})
+        acc = VMPerfAccumulator(vmperf_cfg)
+        results["vmperf"] = acc.accumulate(results["esxi"].get("hosts", []))
 
     if not results:
         logger.warning("No collectors produced results, nothing to do")
