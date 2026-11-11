@@ -287,16 +287,18 @@ class ESXiCollector:
             disk_m = re.search(r'storage\s*=.*?committed\s*=\s*(\d+)', raw, re.DOTALL)
             disk_bytes = int(disk_m.group(1)) if disk_m else 0
 
-            cpu_pct = round(cpu_mhz / cpu_max_mhz * 100, 1) if (cpu_mhz is not None and cpu_max_mhz) else None
-            ram_pct = round(ram_mb / ram_total_mb * 100, 1) if (ram_mb is not None and ram_total_mb) else None
-            disk_gb = round(disk_bytes / 1024 ** 3, 1)
+            cpu_pct      = round(cpu_mhz / cpu_max_mhz * 100, 1) if (cpu_mhz is not None and cpu_max_mhz) else None
+            ram_gb       = round(ram_mb / 1024, 2) if ram_mb is not None else None
+            ram_total_gb = round(ram_total_mb / 1024, 1) if ram_total_mb else None
+            disk_gb      = round(disk_bytes / 1024 ** 3, 1)
 
             perf.append({
-                "name":    vm["name"],
-                "cpu_pct": cpu_pct,
-                "ram_pct": ram_pct,
-                "disk_gb": disk_gb,
-                "power":   vm.get("status", ""),
+                "name":         vm["name"],
+                "cpu_pct":      cpu_pct,
+                "ram_gb":       ram_gb,
+                "ram_total_gb": ram_total_gb,
+                "disk_gb":      disk_gb,
+                "power":        vm.get("status", ""),
             })
         logger.debug("ESXi: collected perf for %d VMs", len(perf))
         return perf
